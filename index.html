@@ -1,0 +1,759 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>DM-1 Converter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a dictaphone panel. Header with an LCD strip; file list beside the editor (Convert / Create /
+   Transcribe tabs); export bar below. Stacks to one column on phones. Same family as SU10-Kit. */
+:root {
+  --panel: #d9dbde; --panel-2: #cbcfd3; --ink: #1d2126; --ink-soft: #545b63;
+  --well: #eef0f2; --edge: #a9afb5;
+  --lcd: #1f2a2c; --lcd-ink: #9fe3d0; --lcd-dim: #3d5752;
+  --accent: #c8352b; --accent-ink: #ffffff;   /* REC red */
+  --wave: #2c3a40; --wave-off: #9aa3ab; --sel: rgba(200,53,43,.10);
+  --ok: #2f7d4f; --warn: #b5541a; --bad: #b3261e; --focus: #1f6fd9;
+  --font-display: "Chakra Petch", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --panel: #1b1e21; --panel-2: #24282c; --ink: #e5e7ea; --ink-soft: #9aa2ab; --well: #2b3035; --edge: #454c54;
+    --lcd: #0e1514; --lcd-ink: #9fe3d0; --lcd-dim: #2f4642; --accent: #e5554a; --accent-ink: #160c0b;
+    --wave: #c9d3d8; --wave-off: #5b646c; --sel: rgba(229,85,74,.14);
+    --ok: #5fbf86; --warn: #e8954f; --bad: #f2776e; --focus: #6aa7ff; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --panel: #1b1e21; --panel-2: #24282c; --ink: #e5e7ea; --ink-soft: #9aa2ab; --well: #2b3035; --edge: #454c54;
+  --lcd: #0e1514; --lcd-ink: #9fe3d0; --lcd-dim: #2f4642; --accent: #e5554a; --accent-ink: #160c0b;
+  --wave: #c9d3d8; --wave-off: #5b646c; --sel: rgba(229,85,74,.14);
+  --ok: #5fbf86; --warn: #e8954f; --bad: #f2776e; --focus: #6aa7ff; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { background: var(--panel); }
+body { margin: 0; background: var(--panel); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h1 { font-size: 26px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+h1 .rec { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--panel-2); }
+h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-soft); }
+p { margin: 0; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-soft); }
+.small { font-size: 13px; }
+button, select, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.top { display: grid; grid-template-columns: 1fr minmax(260px, 440px); gap: 16px; align-items: end; }
+.top p { margin-top: 4px; max-width: 60ch; color: var(--ink-soft); }
+.lcd { background: var(--lcd); color: var(--lcd-ink); border-radius: 6px; padding: 10px 12px; font-family: var(--font-mono); font-size: 13px;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.45); display: flex; flex-direction: column; gap: 4px; min-width: 0; min-height: 62px; }
+.lcd .row { display: flex; justify-content: space-between; gap: 10px; white-space: nowrap; overflow: hidden; }
+.lcd .dim { color: var(--lcd-dim); }
+.lcd .bar { height: 4px; background: var(--lcd-dim); border-radius: 2px; overflow: hidden; }
+.lcd .bar span { display: block; height: 100%; width: 0; background: var(--lcd-ink); transition: width .15s; }
+
+.main { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 18px; align-items: start; }
+.box { background: var(--panel-2); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.drop { border: 2px dashed var(--edge); border-radius: 10px; padding: 18px 12px; text-align: center; background: var(--well); cursor: pointer; }
+.drop.over { border-color: var(--accent); background: var(--sel); }
+.drop strong { font-family: var(--font-display); letter-spacing: .04em; }
+.files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.file { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 10px; border-radius: 8px;
+  background: var(--well); border: 1px solid var(--edge); cursor: pointer; text-align: left; width: 100%; }
+.file[aria-current="true"] { outline: 2px solid var(--accent); outline-offset: 0; }
+.file .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.file .sub { grid-column: 2 / 4; font-size: 12px; color: var(--ink-soft); }
+.badge { font-family: var(--font-display); font-weight: 700; font-size: 11px; letter-spacing: .08em; padding: 2px 6px; border-radius: 4px;
+  background: var(--ink); color: var(--panel); }
+.badge.lp { background: var(--warn); color: #fff; }
+.badge.audio { background: var(--edge); color: var(--ink); }
+.badge.err { background: var(--bad); color: #fff; }
+.x { border: 0; background: none; cursor: pointer; color: var(--ink-soft); font-size: 18px; line-height: 1; padding: 2px 4px; border-radius: 4px; }
+.x:hover { color: var(--bad); }
+
+.tabs { display: flex; gap: 6px; }
+.tabs button { flex: 1; padding: 7px 0; border-radius: 6px; border: 1px solid var(--edge); background: var(--well); cursor: pointer;
+  font-family: var(--font-display); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; font-size: 13px; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.pane { display: flex; flex-direction: column; gap: 12px; }
+.pane[hidden] { display: none; }
+
+.wavewrap { position: relative; background: var(--well); border: 1px solid var(--edge); border-radius: 8px; overflow: hidden; touch-action: none; }
+canvas#wave { display: block; width: 100%; height: 140px; cursor: ew-resize; }
+.transport { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { padding: 7px 12px; border-radius: 6px; border: 1px solid var(--edge); background: var(--well); cursor: pointer; font-weight: 500; }
+.btn:hover { border-color: var(--ink-soft); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: default; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--ink-soft); min-width: 0; }
+label.f > span:first-child { font-weight: 500; }
+label.c { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+label.c input { margin-top: 3px; }
+label.c small { display: block; color: var(--ink-soft); font-size: 12px; }
+input[type=text], input[type=number], select, textarea { background: var(--well); border: 1px solid var(--edge); border-radius: 6px; padding: 6px 8px; min-width: 0; width: 100%; color: var(--ink); }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+textarea { min-height: 180px; resize: vertical; font-family: var(--font-body); line-height: 1.5; }
+.rowline { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.note { font-size: 13px; color: var(--ink-soft); }
+.empty { color: var(--ink-soft); padding: 30px 10px; text-align: center; }
+fieldset { border: 1px solid var(--edge); border-radius: 8px; padding: 10px 12px 12px; margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+legend { font-family: var(--font-display); font-weight: 600; letter-spacing: .06em; font-size: 13px; padding: 0 4px; }
+
+.export { display: grid; grid-template-columns: minmax(180px, 240px) 1fr auto; gap: 12px 16px; align-items: end; }
+.export .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+footer { font-size: 12px; color: var(--ink-soft); display: flex; flex-direction: column; gap: 4px; }
+footer a { color: inherit; }
+details summary { cursor: pointer; font-weight: 500; }
+details .note { margin-top: 6px; }
+
+@media (max-width: 820px) {
+  .top, .main, .export { grid-template-columns: 1fr; }
+  .grid2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1><span class="rec" aria-hidden="true"></span>DM-1 Converter</h1>
+      <p>Turn Olympus DSS recordings (DM-1 and other classic DSS recorders) into WAV or MP3. SP and LP are detected for you. Everything runs in your browser; nothing is uploaded.</p>
+    </div>
+    <div class="lcd" aria-live="polite">
+      <div class="row"><span id="lcd1">NO FILE</span><span id="lcd1r" class="dim"></span></div>
+      <div class="row"><span id="lcd2" class="dim">Drop the card folder or .DSS files</span><span id="lcd2r" class="dim"></span></div>
+      <div class="bar" aria-hidden="true"><span id="lcdbar"></span></div>
+    </div>
+  </header>
+
+  <div class="main">
+    <section class="box" aria-labelledby="h-files">
+      <h2 id="h-files">Recordings</h2>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Add recordings">
+        <strong>Drop files or the whole card folder</strong>
+        <div class="small muted">.DSS, or any audio file for the Create tab<br>or click to choose</div>
+        <input type="file" id="pick" multiple accept=".dss,.DSS,audio/*,.wav,.mp3,.m4a,.ogg,.flac,.aif,.aiff" hidden>
+      </div>
+      <ul class="files" id="files"></ul>
+    </section>
+
+    <section class="box" aria-labelledby="h-edit">
+      <div class="rowline"><h2 id="h-edit">Editor</h2><span id="edName" class="small muted mono"></span></div>
+      <div id="editorEmpty" class="empty">Pick a recording on the left.</div>
+      <div id="editor" hidden>
+        <div class="pane">
+          <div class="wavewrap"><canvas id="wave" aria-label="Waveform. Drag the edges to trim."></canvas></div>
+          <div class="transport">
+            <button class="btn" id="bPlay">▶ Play</button>
+            <button class="btn" id="bPreview" title="Hear the result with all Convert and Create settings">▶ Preview result</button>
+            <span class="small muted mono" id="tInfo"></span>
+          </div>
+          <div class="tabs" role="tablist">
+            <button role="tab" aria-selected="true" data-tab="convert">Convert</button>
+            <button role="tab" aria-selected="false" data-tab="create">Create</button>
+            <button role="tab" aria-selected="false" data-tab="transcribe">Transcribe</button>
+          </div>
+
+          <!-- CONVERT -->
+          <div class="pane" data-pane="convert">
+            <div class="grid2">
+              <label class="f"><span>Start (s)</span><input type="number" id="trimS" step="0.01" min="0"></label>
+              <label class="f"><span>End (s)</span><input type="number" id="trimE" step="0.01" min="0"></label>
+            </div>
+            <div class="grid2">
+              <label class="c"><input type="checkbox" id="optNorm"><span>Normalize<small>Loudest point to −1 dB</small></span></label>
+              <label class="c"><input type="checkbox" id="optLow"><span>Low-cut (100 Hz)<small>Removes rumble and hum</small></span></label>
+              <label class="f"><span>Fade in: <b class="mono" id="vFin">0 ms</b></span><input type="range" id="optFin" min="0" max="2000" step="10" value="0"></label>
+              <label class="f"><span>Fade out: <b class="mono" id="vFout">0 ms</b></span><input type="range" id="optFout" min="0" max="2000" step="10" value="0"></label>
+            </div>
+            <label class="f"><span>File name <span class="muted">(empty = from the naming pattern below)</span></span><input type="text" id="optName" placeholder=""></label>
+            <div class="transport"><button class="btn" id="bCopyAll">Use these settings for all files</button><span class="note">Trim stays per file.</span></div>
+          </div>
+
+          <!-- CREATE -->
+          <div class="pane" data-pane="create" hidden>
+            <p class="note">Sound-design tools. They are applied before the Convert settings and are included when you export. Leave them at their defaults for a straight conversion.</p>
+            <fieldset><legend>Varispeed</legend>
+              <label class="f"><span>Speed: <b class="mono" id="vSpeed">1.00× (0 st)</b></span><input type="range" id="fxSpeed" min="0.25" max="2" step="0.01" value="1"></label>
+              <span class="note">Tape style: slower is lower, faster is higher.</span>
+            </fieldset>
+            <fieldset><legend>Reverse</legend>
+              <label class="c"><input type="checkbox" id="fxRev"><span>Play backwards</span></label>
+            </fieldset>
+            <fieldset><legend>DM-1 treatment</legend>
+              <label class="f"><span>Generations through the LP codec</span>
+                <select id="fxGen"><option value="0">Off</option><option>1</option><option>2</option><option>3</option><option>5</option><option>10</option><option>20</option></select></label>
+              <span class="note">Runs the sound through G.723.1 at 8 kHz, the codec the DM-1 uses in LP mode, once or over and over. Works on any audio file you drop in.</span>
+            </fieldset>
+            <fieldset><legend>VCVA gate</legend>
+              <label class="c"><input type="checkbox" id="fxGate"><span>Cut out quiet parts<small>Like the DM-1's voice-activated recording: when it gets quiet, the "tape" stops</small></span></label>
+              <label class="f"><span>Threshold: <b class="mono" id="vThr">−35 dB</b> below the loudest point</span><input type="range" id="fxThr" min="-60" max="-6" step="1" value="-35"></label>
+            </fieldset>
+            <div class="transport"><button class="btn" id="bFxReset">Reset Create settings</button></div>
+          </div>
+
+          <!-- TRANSCRIBE -->
+          <div class="pane" data-pane="transcribe" hidden>
+            <p class="note">Speech to text with Whisper, running in your browser. The model downloads once and is then cached. Uses the trimmed recording, without Create effects.</p>
+            <div class="grid2">
+              <label class="f"><span>Model</span>
+                <select id="trModel">
+                  <option value="onnx-community/whisper-tiny">Tiny: fastest, rough (~40 MB)</option>
+                  <option value="onnx-community/whisper-base" selected>Base: balanced (~80 MB)</option>
+                  <option value="onnx-community/whisper-small">Small: most accurate, slower (~250 MB)</option>
+                </select></label>
+              <label class="f"><span>Language</span>
+                <select id="trLang">
+                  <option value="en">English</option><option value="nl">Dutch</option>
+                  <optgroup label="All languages"><option value="af">Afrikaans</option><option value="ar">Arabic</option><option value="hy">Armenian</option><option value="az">Azerbaijani</option><option value="be">Belarusian</option><option value="bn">Bengali</option><option value="bs">Bosnian</option><option value="bg">Bulgarian</option><option value="ca">Catalan</option><option value="zh">Chinese</option><option value="hr">Croatian</option><option value="cs">Czech</option><option value="da">Danish</option><option value="et">Estonian</option><option value="fi">Finnish</option><option value="fr">French</option><option value="gl">Galician</option><option value="de">German</option><option value="el">Greek</option><option value="gu">Gujarati</option><option value="he">Hebrew</option><option value="hi">Hindi</option><option value="hu">Hungarian</option><option value="is">Icelandic</option><option value="id">Indonesian</option><option value="it">Italian</option><option value="ja">Japanese</option><option value="kn">Kannada</option><option value="kk">Kazakh</option><option value="ko">Korean</option><option value="lv">Latvian</option><option value="lt">Lithuanian</option><option value="lb">Luxembourgish</option><option value="mk">Macedonian</option><option value="ms">Malay</option><option value="ml">Malayalam</option><option value="mr">Marathi</option><option value="mi">Maori</option><option value="ne">Nepali</option><option value="no">Norwegian</option><option value="fa">Persian</option><option value="pl">Polish</option><option value="pt">Portuguese</option><option value="pa">Punjabi</option><option value="ro">Romanian</option><option value="ru">Russian</option><option value="sr">Serbian</option><option value="sk">Slovak</option><option value="sl">Slovenian</option><option value="es">Spanish</option><option value="sw">Swahili</option><option value="sv">Swedish</option><option value="tl">Tagalog</option><option value="ta">Tamil</option><option value="te">Telugu</option><option value="th">Thai</option><option value="tr">Turkish</option><option value="uk">Ukrainian</option><option value="ur">Urdu</option><option value="vi">Vietnamese</option><option value="cy">Welsh</option></optgroup>
+                </select></label>
+            </div>
+            <div class="grid2">
+              <label class="c"><input type="checkbox" id="trTs"><span>Timestamps<small>[0:12] in front of each part</small></span></label>
+              <label class="c"><input type="checkbox" id="trGpu"><span>Use the GPU<small>Faster on most Macs; turn off if it hangs</small></span></label>
+              <label class="c"><input type="checkbox" id="trTrans"><span>Translate to English<small>Language above = the spoken language. Works best with Small</small></span></label>
+            </div>
+            <div class="transport">
+              <button class="btn primary" id="bTr">Transcribe this file</button>
+              <button class="btn" id="bTrAll">Transcribe all files</button>
+              <span class="small muted" id="trStatus"></span>
+            </div>
+            <textarea id="trText" placeholder="The transcript appears here. You can edit it before saving."></textarea>
+            <div class="transport">
+              <button class="btn" id="bTrCopy">Copy</button>
+              <button class="btn" id="bTrSave">Save as .md</button>
+              <span class="note">Transcripts are also included in the ZIP.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="box" aria-labelledby="h-exp">
+    <h2 id="h-exp">Export</h2>
+    <div class="export">
+      <label class="f"><span>Format</span>
+        <select id="outFmt">
+          <option value="wav-native">WAV, native rate (8 / 11 kHz)</option>
+          <option value="wav-22050">WAV, 22.05 kHz</option>
+          <option value="wav-44100" selected>WAV, 44.1 kHz</option>
+          <option value="mp3-64">MP3, 64 kbps</option>
+          <option value="mp3-128">MP3, 128 kbps</option>
+        </select></label>
+      <label class="f"><span>Naming pattern for DSS files <span class="muted mono">{date} {time} {device} {mode} {orig} {n}</span></span>
+        <input type="text" id="outPattern" value="{date} {time} {device} {mode}"></label>
+      <div class="actions">
+        <button class="btn" id="bSave" disabled>Save this file</button>
+        <button class="btn primary" id="bZip" disabled>Save all (ZIP)</button>
+      </div>
+    </div>
+    <p class="note">All output is mono, 16-bit for WAV. 64 kbps MP3 already holds everything the DM-1 records; 128 kbps is there for compatibility.</p>
+  </section>
+
+  <footer>
+    <details>
+      <summary>About DSS and the DM-1</summary>
+      <p class="note">SP mode uses the DSS SP codec (about 11 kHz, sound up to ~5 kHz). LP uses G.723.1, a telephone codec (8 kHz, up to ~3.5 kHz). The file header stores the device name and the recording's start time, which the naming pattern uses. Newer DS2 files (DSS Pro) are not supported.</p>
+    </details>
+    <p>Idea, design &amp; testing: Maurice Hissink · Code: Ember (Claude, Anthropic) · <a href="https://github.com/harmonicworks/DM-1-Converter">Source on GitHub</a> (GPL-3.0)</p>
+    <p>Decoding and encoding by <a href="https://ffmpeg.org">FFmpeg</a> (GPL) via ffmpeg.wasm. Transcription by Whisper via Transformers.js. Not affiliated with Olympus / OM Digital Solutions.</p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* ============ engine (ffmpeg.wasm core, main thread) ============ */
+const CORE = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/';
+let ff = null, ffPromise = null, ffLog = [], fsN = 0;
+
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(s); });
+}
+async function fetchWithProgress(url, label) {
+  const r = await fetch(url); if (!r.ok) throw new Error('Download failed: ' + url);
+  const total = +r.headers.get('content-length') || 0; const reader = r.body.getReader(); const parts = []; let got = 0;
+  for (;;) { const { done, value } = await reader.read(); if (done) break; parts.push(value); got += value.length;
+    if (total) lcdProgress(got / total, label + ' ' + Math.round(got / total * 100) + '%'); }
+  return new Blob(parts, { type: 'application/wasm' });
+}
+function engine() {
+  if (ffPromise) return ffPromise;
+  ffPromise = (async () => {
+    lcdStatus('Loading engine… (first time ~32 MB)');
+    await loadScript(CORE + 'ffmpeg-core.js');
+    const wasm = await fetchWithProgress(CORE + 'ffmpeg-core.wasm', 'Engine');
+    const wasmURL = URL.createObjectURL(wasm);
+    ff = await createFFmpegCore({ mainScriptUrlOrBlob: CORE + 'ffmpeg-core.js#' + btoa(JSON.stringify({ wasmURL })) });
+    ff.setLogger(e => ffLog.push(e.message));
+    lcdProgress(0, ''); lcdStatus('Engine ready');
+    return ff;
+  })();
+  ffPromise.catch(() => { ffPromise = null; });
+  return ffPromise;
+}
+function ffRun(args) { ffLog = []; ff.exec('-hide_banner', '-nostdin', '-y', ...args); const code = ff.ret; ff.reset(); return { code, log: ffLog.join('\n') }; }
+function ffTmp(ext) { return 't' + (++fsN) + '.' + ext; }
+function ffRm(...names) { for (const n of names) { try { ff.FS.unlink(n); } catch {} } }
+
+/* ============ WAV helpers ============ */
+function parseWav(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const tag = o => String.fromCharCode(u8[o], u8[o + 1], u8[o + 2], u8[o + 3]);
+  if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') throw new Error('Not a WAV');
+  let p = 12, fmt = null, data = null;
+  while (p + 8 <= u8.length) {
+    const id = tag(p); let size = dv.getUint32(p + 4, true);
+    if (id === 'fmt ') fmt = { format: dv.getUint16(p + 8, true), ch: dv.getUint16(p + 10, true), rate: dv.getUint32(p + 12, true), bits: dv.getUint16(p + 22, true) };
+    if (id === 'data') { if (p + 8 + size > u8.length) size = u8.length - p - 8; data = { off: p + 8, size }; break; }
+    p += 8 + size + (size & 1);
+  }
+  if (!fmt || !data) throw new Error('Broken WAV');
+  const n = Math.floor(data.size / 4);
+  const f32 = new Float32Array(n);
+  new Uint8Array(f32.buffer).set(u8.subarray(data.off, data.off + n * 4));
+  return { pcm: f32, rate: fmt.rate };
+}
+function makeWavF32(f32, rate) {
+  const buf = new ArrayBuffer(44 + f32.length * 4), dv = new DataView(buf), w = (o, s) => { for (let i = 0; i < 4; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); dv.setUint32(4, 36 + f32.length * 4, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true);
+  dv.setUint16(20, 3, true); dv.setUint16(22, 1, true); dv.setUint32(24, rate, true); dv.setUint32(28, rate * 4, true);
+  dv.setUint16(32, 4, true); dv.setUint16(34, 32, true); w(36, 'data'); dv.setUint32(40, f32.length * 4, true);
+  new Float32Array(buf, 44).set(f32); return new Uint8Array(buf);
+}
+
+/* ============ DSS header ============ */
+function parseDssHeader(u8) {
+  if (u8.length < 0x2b0) return null;
+  const s = (a, b) => String.fromCharCode(...u8.subarray(a, b));
+  const magic = s(1, 4);
+  if (magic === 'ds2') return { ds2: true };
+  if (magic !== 'dss') return null;
+  const device = s(0x0c, 0x1c).replace(/[^\x20-\x7e]/g, '').trim();
+  const dt = str => { if (!/^\d{12}$/.test(str)) return null;
+    const y = 2000 + +str.slice(0, 2); return new Date(y, +str.slice(2, 4) - 1, +str.slice(4, 6), +str.slice(6, 8), +str.slice(8, 10), +str.slice(10, 12)); };
+  const modeByte = u8[0x2a4];
+  return { device, start: dt(s(0x26, 0x32)), end: dt(s(0x32, 0x3e)), mode: modeByte === 0 ? 'SP' : (modeByte === 2 || modeByte === 6) ? 'LP' : null };
+}
+
+/* ============ state ============ */
+const files = []; let cur = null, uid = 0;
+const defaultEdit = () => ({ norm: false, low: false, fin: 0, fout: 0 });
+const defaultFx = () => ({ speed: 1, rev: false, gen: 0, gate: false, thr: -35 });
+const $ = id => document.getElementById(id);
+
+/* ============ LCD ============ */
+function lcdStatus(t) { $('lcd2').textContent = t; }
+function lcdProgress(f, t) { $('lcdbar').style.width = (Math.max(0, Math.min(1, f)) * 100) + '%'; if (t) $('lcd2r').textContent = t; else $('lcd2r').textContent = ''; }
+const fmtT = s => { s = Math.max(0, s); const m = Math.floor(s / 60); return m + ':' + (s - m * 60).toFixed(1).padStart(4, '0'); };
+const pad2 = n => String(n).padStart(2, '0');
+const fmtDate = d => d ? d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) : '';
+const fmtTime = d => d ? pad2(d.getHours()) + pad2(d.getMinutes()) : '';
+function updateLcd() {
+  if (!cur) { $('lcd1').textContent = files.length ? files.length + ' FILE' + (files.length > 1 ? 'S' : '') : 'NO FILE'; $('lcd1r').textContent = ''; return; }
+  const f = cur;
+  $('lcd1').textContent = [f.device || 'AUDIO', f.mode || '', f.rate ? (Math.round(f.rate / 100) / 10) + ' kHz' : ''].filter(Boolean).join(' · ');
+  $('lcd1r').textContent = f.pcm ? fmtT(f.pcm.length / f.rate) : '';
+  if (f.start) lcdStatus(fmtDate(f.start) + ' ' + pad2(f.start.getHours()) + ':' + pad2(f.start.getMinutes()) + ':' + pad2(f.start.getSeconds()));
+}
+
+/* ============ adding files ============ */
+const AUDIO_EXT = /\.(dss|wav|mp3|m4a|ogg|oga|flac|aif|aiff|aac|opus|webm)$/i;
+async function collect(dt) {
+  const out = []; let skipped = 0;
+  const walk = entry => new Promise(res => {
+    if (entry.isFile) entry.file(f => { if (AUDIO_EXT.test(f.name)) out.push(f); else skipped++; res(); }, () => res());
+    else if (entry.isDirectory) { const r = entry.createReader(); const all = [];
+      const more = () => r.readEntries(async es => { if (!es.length) { for (const e of all) await walk(e); res(); } else { all.push(...es); more(); } }, () => res()); more(); }
+    else res();
+  });
+  const items = [...(dt.items || [])].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (items.length) for (const e of items) await walk(e);
+  else for (const f of dt.files) AUDIO_EXT.test(f.name) ? out.push(f) : skipped++;
+  return { list: out, skipped };
+}
+async function addFiles(list, skipped = 0) {
+  list = [...list].filter(f => AUDIO_EXT.test(f.name));
+  list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  if (!list.length) { lcdStatus(skipped ? 'No recordings found (' + skipped + ' other files skipped)' : 'No recordings found'); return; }
+  try { await engine(); } catch (e) { lcdStatus('Engine failed to load. Check your connection.'); console.error(e); return; }
+  let i = 0;
+  for (const file of list) {
+    i++; lcdProgress(i / list.length, 'Decoding ' + i + '/' + list.length);
+    const f = { id: ++uid, name: file.name, base: file.name.replace(/\.[^.]+$/, ''), bytes: new Uint8Array(await file.arrayBuffer()),
+      lastModified: new Date(file.lastModified), edit: defaultEdit(), fx: defaultFx(), outName: '', transcript: '' };
+    try { decodeFile(f); } catch (e) { f.error = e.message; }
+    files.push(f); renderList();
+    if (!cur && !f.error) select(f);
+    await new Promise(r => setTimeout(r, 0));
+  }
+  lcdProgress(0, ''); lcdStatus(list.length + ' added' + (skipped ? ' · ' + skipped + ' non-audio files skipped' : ''));
+  $('bZip').disabled = !files.some(f => !f.error);
+}
+function decodeFile(f) {
+  const isDss = /\.dss$/i.test(f.name);
+  if (isDss) {
+    const h = parseDssHeader(f.bytes);
+    if (h && h.ds2) throw new Error('DS2 (DSS Pro) is not supported');
+    if (h) { f.dss = true; f.device = h.device; f.start = h.start; f.mode = h.mode; }
+  }
+  const ext = (f.name.match(/\.([^.]+)$/) || [, 'bin'])[1].toLowerCase();
+  const inN = ffTmp(ext), outN = ffTmp('wav');
+  ff.FS.writeFile(inN, f.bytes);
+  const r = ffRun(['-i', inN, '-vn', '-ac', '1', '-c:a', 'pcm_f32le', outN]);
+  let wav = null; try { wav = ff.FS.readFile(outN); } catch {}
+  ffRm(inN, outN);
+  if (!wav || wav.length <= 44) throw new Error(isDss ? 'Could not decode this DSS file' : 'Could not decode this audio file');
+  const m = r.log.match(/Audio: (\w+)/);
+  const codec = m ? m[1] : '';
+  if (codec === 'dss_sp') f.mode = 'SP'; else if (codec === 'g723_1' && isDss) f.mode = 'LP';
+  if (!isDss) { f.mode = ''; f.device = ''; f.start = null; f.codec = codec; }
+  const { pcm, rate } = parseWav(wav);
+  f.pcm = pcm; f.rate = rate; f.trim = [0, pcm.length / rate];
+  f.peaks = null;
+}
+
+/* ============ list ============ */
+function renderList() {
+  const ul = $('files'); ul.innerHTML = '';
+  files.forEach((f, idx) => {
+    const li = document.createElement('li');
+    const b = document.createElement('button'); b.className = 'file'; b.setAttribute('aria-current', f === cur ? 'true' : 'false');
+    const badge = f.error ? '<span class="badge err">ERR</span>' : f.mode ? '<span class="badge ' + (f.mode === 'LP' ? 'lp' : '') + '">' + f.mode + '</span>' : '<span class="badge audio">AUDIO</span>';
+    const sub = f.error ? esc(f.error) : [f.start ? fmtDate(f.start) + ' ' + pad2(f.start.getHours()) + ':' + pad2(f.start.getMinutes()) : '', fmtT(f.pcm.length / f.rate), fxActive(f) ? 'fx' : '', f.transcript ? 'text ✓' : ''].filter(Boolean).join(' · ');
+    b.innerHTML = badge + '<span class="nm">' + esc(outBase(f, idx)) + '</span><span class="x" role="button" aria-label="Remove ' + esc(f.name) + '" title="Remove">×</span><span class="sub">' + esc(f.name) + ' · ' + sub + '</span>';
+    b.onclick = e => { if (e.target.classList.contains('x')) { removeFile(f); return; } if (!f.error) select(f); };
+    li.appendChild(b); ul.appendChild(li);
+  });
+  updateLcd();
+}
+function removeFile(f) {
+  const i = files.indexOf(f); if (i < 0) return; files.splice(i, 1);
+  if (cur === f) { stopPlay(); cur = null; const next = files.find(x => !x.error); next ? select(next) : showEditor(false); }
+  renderList(); $('bZip').disabled = !files.some(f => !f.error);
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fxActive = f => f.fx.speed !== 1 || f.fx.rev || f.fx.gen > 0 || f.fx.gate;
+
+/* ============ naming ============ */
+function outBase(f, idx) {
+  if (f.outName.trim()) return f.outName.trim();
+  if (!f.dss) return f.base;
+  const d = f.start || f.lastModified;
+  const pat = $('outPattern').value || '{orig}';
+  let s = pat.replace(/\{(\w+)\}/g, (m, k) => ({ date: fmtDate(d), time: fmtTime(d), device: f.device || '', mode: f.mode || '', orig: f.base, n: String((idx ?? files.indexOf(f)) + 1).padStart(2, '0') }[k] ?? m));
+  s = s.replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim();
+  return s || f.base;
+}
+
+/* ============ editor ============ */
+function showEditor(on) { $('editor').hidden = !on; $('editorEmpty').hidden = on; $('bSave').disabled = !on; if (!on) $('edName').textContent = ''; }
+function select(f) {
+  stopPlay(); cur = f; showEditor(true); renderList();
+  $('edName').textContent = f.name;
+  const dur = f.pcm.length / f.rate;
+  $('trimS').max = $('trimE').max = dur.toFixed(2);
+  syncEditor(); drawWave();
+}
+function syncEditor() {
+  const f = cur; if (!f) return;
+  $('trimS').value = f.trim[0].toFixed(2); $('trimE').value = f.trim[1].toFixed(2);
+  $('optNorm').checked = f.edit.norm; $('optLow').checked = f.edit.low;
+  $('optFin').value = f.edit.fin; $('optFout').value = f.edit.fout;
+  $('vFin').textContent = f.edit.fin + ' ms'; $('vFout').textContent = f.edit.fout + ' ms';
+  $('optName').value = f.outName; $('optName').placeholder = outBase({ ...f, outName: '' });
+  $('fxSpeed').value = f.fx.speed; $('fxRev').checked = f.fx.rev; $('fxGen').value = String(f.fx.gen);
+  $('fxGate').checked = f.fx.gate; $('fxThr').value = f.fx.thr;
+  showSpeed(); $('vThr').textContent = '−' + Math.abs(f.fx.thr) + ' dB';
+  $('trText').value = f.transcript || '';
+  $('tInfo').textContent = 'Selection ' + fmtT(f.trim[0]) + ' – ' + fmtT(f.trim[1]);
+}
+function showSpeed() { const s = +$('fxSpeed').value; const st = 12 * Math.log2(s); $('vSpeed').textContent = s.toFixed(2) + '× (' + (st >= 0 ? '+' : '−') + Math.abs(st).toFixed(1) + ' st)'; }
+function touched() { renderList(); }
+
+$('trimS').onchange = () => { if (!cur) return; const v = Math.max(0, Math.min(+$('trimS').value || 0, cur.trim[1] - 0.05)); cur.trim[0] = v; syncEditor(); drawWave(); };
+$('trimE').onchange = () => { if (!cur) return; const d = cur.pcm.length / cur.rate; const v = Math.min(d, Math.max(+$('trimE').value || d, cur.trim[0] + 0.05)); cur.trim[1] = v; syncEditor(); drawWave(); };
+$('optNorm').onchange = e => { cur.edit.norm = e.target.checked; };
+$('optLow').onchange = e => { cur.edit.low = e.target.checked; };
+$('optFin').oninput = e => { cur.edit.fin = +e.target.value; $('vFin').textContent = cur.edit.fin + ' ms'; };
+$('optFout').oninput = e => { cur.edit.fout = +e.target.value; $('vFout').textContent = cur.edit.fout + ' ms'; };
+$('optName').oninput = e => { cur.outName = e.target.value; touched(); };
+$('outPattern').oninput = () => { renderList(); if (cur) $('optName').placeholder = outBase({ ...cur, outName: '' }); };
+$('bCopyAll').onclick = () => { for (const f of files) if (f !== cur) { f.edit = { ...cur.edit }; f.fx = { ...cur.fx }; } renderList(); lcdStatus('Settings copied to all files'); };
+$('fxSpeed').oninput = e => { cur.fx.speed = +e.target.value; showSpeed(); touched(); };
+$('fxSpeed').ondblclick = () => { cur.fx.speed = 1; syncEditor(); touched(); };
+$('fxRev').onchange = e => { cur.fx.rev = e.target.checked; touched(); };
+$('fxGen').onchange = e => { cur.fx.gen = +e.target.value; touched(); };
+$('fxGate').onchange = e => { cur.fx.gate = e.target.checked; touched(); };
+$('fxThr').oninput = e => { cur.fx.thr = +e.target.value; $('vThr').textContent = '−' + Math.abs(cur.fx.thr) + ' dB'; };
+$('bFxReset').onclick = () => { cur.fx = defaultFx(); syncEditor(); touched(); };
+document.querySelectorAll('[role=tab]').forEach(t => t.onclick = () => {
+  document.querySelectorAll('[role=tab]').forEach(x => x.setAttribute('aria-selected', x === t ? 'true' : 'false'));
+  document.querySelectorAll('[data-pane]').forEach(p => p.hidden = p.dataset.pane !== t.dataset.tab);
+});
+
+/* ============ waveform ============ */
+const cv = $('wave'); let dragging = null, playheadT = null;
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function drawWave() {
+  if (!cur) return;
+  const f = cur, dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const dur = f.pcm.length / f.rate, x0 = f.trim[0] / dur * W, x1 = f.trim[1] / dur * W;
+  g.fillStyle = cssVar('--sel'); g.fillRect(x0, 0, x1 - x0, H);
+  let peak = 0; for (let i = 0; i < f.pcm.length; i += 4) { const a = Math.abs(f.pcm[i]); if (a > peak) peak = a; }
+  const scale = peak > 0 ? Math.min(1 / peak, 8) * .92 : 1; // zoom quiet recordings so you can see them
+  const per = f.pcm.length / W, mid = H / 2, cOn = cssVar('--wave'), cOff = cssVar('--wave-off');
+  for (let x = 0; x < W; x++) {
+    let mn = 1, mx = -1; const a = Math.floor(x * per), b = Math.min(f.pcm.length, Math.floor((x + 1) * per) + 1);
+    for (let i = a; i < b; i++) { const v = f.pcm[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+    g.fillStyle = (x >= x0 && x <= x1) ? cOn : cOff;
+    g.fillRect(x, mid - mx * scale * mid, 1, Math.max(1, (mx - mn) * scale * mid));
+  }
+  g.fillStyle = cssVar('--accent');
+  for (const x of [x0, x1]) { g.fillRect(Math.round(x) - 1, 0, 2, H); g.fillRect(Math.round(x) - (x === x0 ? 0 : 7), 0, 8, 10); }
+  if (playheadT != null) { const px = playheadT / dur * W; g.fillStyle = cssVar('--ink'); g.fillRect(px, 0, 1.5, H); }
+  if (scale > 1.05) { g.fillStyle = cssVar('--ink-soft'); g.font = '11px ' + cssVar('--font-mono'); g.fillText('display zoom ×' + scale.toFixed(1), 6, H - 6); }
+}
+function tAt(e) { const r = cv.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * cur.pcm.length / cur.rate; }
+cv.addEventListener('pointerdown', e => {
+  if (!cur) return; const t = tAt(e), dur = cur.pcm.length / cur.rate, tol = dur * 12 / cv.clientWidth;
+  dragging = Math.abs(t - cur.trim[0]) <= Math.abs(t - cur.trim[1]) ? 0 : 1;
+  if (Math.abs(t - cur.trim[dragging]) > tol) dragging = t < (cur.trim[0] + cur.trim[1]) / 2 ? 0 : 1;
+  cv.setPointerCapture(e.pointerId); moveHandle(t);
+});
+cv.addEventListener('pointermove', e => { if (dragging != null) moveHandle(tAt(e)); });
+cv.addEventListener('pointerup', () => { dragging = null; });
+function moveHandle(t) {
+  if (dragging === 0) cur.trim[0] = Math.min(t, cur.trim[1] - 0.05); else cur.trim[1] = Math.max(t, cur.trim[0] + 0.05);
+  syncEditor(); drawWave();
+}
+window.addEventListener('resize', () => drawWave());
+
+/* ============ DSP ============ */
+function gate(x, rate, thrDb) {
+  let pk = 0; for (const v of x) { const q = Math.abs(v); if (q > pk) pk = q; }
+  if (!pk) return x;
+  const win = Math.max(1, Math.round(rate * 0.01)), hold = Math.round(rate * 0.08), thr = pk * Math.pow(10, thrDb / 20), fade = Math.round(rate * 0.003);
+  const keep = new Uint8Array(x.length); let open = 0;
+  for (let i = 0; i < x.length; i += win) {
+    let s = 0; const e = Math.min(x.length, i + win); for (let j = i; j < e; j++) s += x[j] * x[j];
+    const rms = Math.sqrt(s / (e - i));
+    if (rms >= thr) open = hold; else open = Math.max(0, open - win);
+    if (open > 0) keep.fill(1, i, e);
+  }
+  const out = []; let i = 0;
+  while (i < x.length) {
+    if (!keep[i]) { i++; continue; }
+    let j = i; while (j < x.length && keep[j]) j++;
+    const seg = x.slice(i, j); const fl = Math.min(fade, seg.length >> 1);
+    for (let k = 0; k < fl; k++) { seg[k] *= k / fl; seg[seg.length - 1 - k] *= k / fl; }
+    out.push(seg); i = j;
+  }
+  const n = out.reduce((a, s) => a + s.length, 0), r = new Float32Array(n); let p = 0; for (const s of out) { r.set(s, p); p += s.length; }
+  return r;
+}
+function highpass(x, rate, fc) {
+  const w = 2 * Math.PI * fc / rate, cs = Math.cos(w), al = Math.sin(w) / (2 * Math.SQRT1_2);
+  const a0 = 1 + al, b0 = (1 + cs) / 2 / a0, b1 = -(1 + cs) / a0, b2 = b0, a1 = -2 * cs / a0, a2 = (1 - al) / a0;
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < x.length; i++) { const v = x[i], y = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = v; y2 = y1; y1 = y; x[i] = y; }
+}
+function lpTreat(x, rate, gens) {
+  let cur = x, r = rate;
+  for (let g = 0; g < gens; g++) {
+    const a = ffTmp('wav'), b = ffTmp('wav'), c = ffTmp('wav');
+    ff.FS.writeFile(a, makeWavF32(cur, r));
+    ffRun(['-i', a, '-ac', '1', '-ar', '8000', '-c:a', 'g723_1', '-b:a', '6300', b]);
+    ffRun(['-i', b, '-c:a', 'pcm_f32le', c]);
+    let w = null; try { w = ff.FS.readFile(c); } catch {}
+    ffRm(a, b, c);
+    if (!w) throw new Error('DM-1 treatment failed');
+    const p = parseWav(w); cur = p.pcm; r = p.rate;
+  }
+  return { pcm: cur, rate: r };
+}
+/* full chain: trim → gate → reverse → LP treatment → low-cut → fades → normalize; varispeed via sample-rate */
+function render(f, { fx = true } = {}) {
+  const a = Math.floor(f.trim[0] * f.rate), b = Math.ceil(f.trim[1] * f.rate);
+  let x = f.pcm.slice(a, b), rate = f.rate;
+  if (fx && f.fx.gate) x = gate(x, rate, f.fx.thr);
+  if (fx && f.fx.rev) x.reverse();
+  if (fx && f.fx.gen > 0) { const t = lpTreat(x, rate, f.fx.gen); x = t.pcm; rate = t.rate; }
+  if (f.edit.low) highpass(x, rate, 100);
+  const fi = Math.min(x.length >> 1, Math.round(f.edit.fin / 1000 * rate)), fo = Math.min(x.length >> 1, Math.round(f.edit.fout / 1000 * rate));
+  for (let i = 0; i < fi; i++) x[i] *= i / fi;
+  for (let i = 0; i < fo; i++) x[x.length - 1 - i] *= i / fo;
+  if (f.edit.norm) { let pk = 0; for (const v of x) { const q = Math.abs(v); if (q > pk) pk = q; } if (pk > 0) { const gn = Math.pow(10, -1 / 20) / pk; for (let i = 0; i < x.length; i++) x[i] *= gn; } }
+  if (fx) rate = Math.max(1000, Math.round(rate * f.fx.speed));
+  return { pcm: x, rate };
+}
+function encode(pcm, rate, fmt) {
+  const [kind, val] = fmt.split('-');
+  const a = ffTmp('wav'), b = ffTmp(kind);
+  ff.FS.writeFile(a, makeWavF32(pcm, rate));
+  const args = ['-i', a, '-ac', '1'];
+  if (kind === 'wav') { if (val !== 'native') args.push('-ar', val); args.push('-c:a', 'pcm_s16le', b); }
+  else args.push('-ar', val === '64' ? '22050' : '44100', '-c:a', 'libmp3lame', '-b:a', val + 'k', b);
+  const r = ffRun(args); let out = null; try { out = ff.FS.readFile(b); } catch {}
+  ffRm(a, b);
+  if (!out) { console.error(r.log); throw new Error('Encoding failed'); }
+  return out;
+}
+
+/* ============ playback ============ */
+let actx = null, src = null, raf = 0;
+function stopPlay() { if (src) { try { src.stop(); } catch {} src = null; } cancelAnimationFrame(raf); playheadT = null; $('bPlay').textContent = '▶ Play'; $('bPreview').textContent = '▶ Preview result'; if (cur) drawWave(); }
+async function playBuf(u8OrPcm, rate, onTick) {
+  actx = actx || new AudioContext(); await actx.resume();
+  let buf;
+  if (rate) { buf = actx.createBuffer(1, u8OrPcm.length, rate); buf.copyToChannel(u8OrPcm, 0); }
+  else buf = await actx.decodeAudioData(u8OrPcm.buffer.slice(u8OrPcm.byteOffset, u8OrPcm.byteOffset + u8OrPcm.byteLength));
+  src = actx.createBufferSource(); src.buffer = buf; src.connect(actx.destination);
+  const t0 = actx.currentTime; src.start();
+  const me = src; src.onended = () => { if (src === me) stopPlay(); };
+  const tick = () => { if (src !== me) return; onTick && onTick(actx.currentTime - t0, buf.duration); raf = requestAnimationFrame(tick); }; tick();
+}
+$('bPlay').onclick = async () => {
+  if (src) { stopPlay(); return; }
+  const f = cur, a = Math.floor(f.trim[0] * f.rate), b = Math.ceil(f.trim[1] * f.rate);
+  await playBuf(f.pcm.slice(a, b), f.rate, (t) => { playheadT = f.trim[0] + t; drawWave(); });
+  $('bPlay').textContent = '■ Stop';
+};
+$('bPreview').onclick = async () => {
+  if (src) { stopPlay(); return; }
+  try {
+    lcdStatus('Rendering preview…'); await new Promise(r => setTimeout(r, 10));
+    const r = render(cur); const wav = encode(r.pcm, r.rate, 'wav-44100');
+    await playBuf(wav, 0, (t, d) => { $('tInfo').textContent = 'Preview ' + fmtT(t) + ' / ' + fmtT(d); });
+    $('bPreview').textContent = '■ Stop'; updateLcd();
+  } catch (e) { lcdStatus('Preview failed: ' + e.message); }
+};
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && cur && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); $('bPlay').click(); }
+});
+
+/* ============ export ============ */
+function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+function outExt() { return $('outFmt').value.startsWith('mp3') ? 'mp3' : 'wav'; }
+function exportOne(f) { const r = render(f); return new Blob([encode(r.pcm, r.rate, $('outFmt').value)], { type: outExt() === 'mp3' ? 'audio/mpeg' : 'audio/wav' }); }
+$('bSave').onclick = async () => {
+  if (!cur) return;
+  try { lcdStatus('Exporting…'); await new Promise(r => setTimeout(r, 10)); download(exportOne(cur), outBase(cur) + '.' + outExt()); lcdStatus('Saved ' + outBase(cur) + '.' + outExt()); }
+  catch (e) { lcdStatus('Export failed: ' + e.message); }
+};
+$('bZip').onclick = async () => {
+  try {
+    if (!window.JSZip) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+    const zip = new JSZip(), used = new Set(), ok = files.filter(f => !f.error);
+    const uniq = n => { let s = n, k = 2; while (used.has(s.toLowerCase())) s = n.replace(/(\.[^.]+)$/, ' (' + (k++) + ')$1'); used.add(s.toLowerCase()); return s; };
+    for (let i = 0; i < ok.length; i++) {
+      const f = ok[i]; lcdProgress((i + 1) / ok.length, 'Export ' + (i + 1) + '/' + ok.length); await new Promise(r => setTimeout(r, 0));
+      const base = outBase(f, files.indexOf(f));
+      zip.file(uniq(base + '.' + outExt()), exportOne(f));
+      if (f.transcript) zip.file(uniq(base + '.md'), transcriptMd(f));
+    }
+    const d = new Date(); download(await zip.generateAsync({ type: 'blob' }), 'DM-1 export ' + fmtDate(d) + ' ' + fmtTime(d) + '.zip');
+    lcdProgress(0, ''); lcdStatus('ZIP saved (' + ok.length + ' files)');
+  } catch (e) { lcdProgress(0, ''); lcdStatus('ZIP failed: ' + e.message); }
+};
+
+/* ============ transcription (Whisper via Transformers.js) ============ */
+const TFJS = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1/dist/transformers.min.js';
+let asr = null, asrModel = '', asrLoading = null;
+async function getAsr(model) {
+  const key = model + ($('trGpu').checked ? '|gpu' : '');
+  if (asr && asrModel === key) return asr;
+  if (asrLoading && asrModel === key) return asrLoading;
+  asr = null; asrModel = key;
+  asrLoading = (async () => {
+    const { pipeline } = await import(TFJS);
+    const files = {};
+    const progress_callback = p => {
+      if (p.status === 'progress' && p.total) { files[p.file] = [p.loaded, p.total];
+        const t = Object.values(files).reduce((a, v) => [a[0] + v[0], a[1] + v[1]], [0, 0]);
+        lcdProgress(t[0] / t[1], 'Model ' + Math.round(t[0] / t[1] * 100) + '%'); trStatus('Downloading model… ' + Math.round(t[0] / 1e6) + ' / ' + Math.round(t[1] / 1e6) + ' MB'); }
+    };
+    let p = null;
+    if (navigator.gpu && $('trGpu').checked) {
+      try { p = await pipeline('automatic-speech-recognition', model, { device: 'webgpu', dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' }, progress_callback }); }
+      catch (e) { console.warn('WebGPU failed, using WASM', e); }
+    }
+    if (!p) p = await pipeline('automatic-speech-recognition', model, { device: 'wasm', dtype: 'q8', progress_callback });
+    lcdProgress(0, ''); asr = p; return p;
+  })();
+  asrLoading.catch(() => { asrLoading = null; asrModel = ''; });
+  return asrLoading;
+}
+function trStatus(t) { $('trStatus').textContent = t; }
+async function transcribe(f) {
+  const model = $('trModel').value;
+  trStatus('Loading model…');
+  const p = await getAsr(model);
+  const r = render(f, { fx: false });
+  const a = ffTmp('wav'), b = ffTmp('wav');
+  ff.FS.writeFile(a, makeWavF32(r.pcm, r.rate)); ffRun(['-i', a, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_f32le', b]);
+  const audio = parseWav(ff.FS.readFile(b)).pcm; ffRm(a, b);
+  trStatus('Listening… (' + fmtT(audio.length / 16000) + ' of audio)');
+  const opts = { chunk_length_s: 30, stride_length_s: 5, task: $('trTrans').checked ? 'translate' : 'transcribe', return_timestamps: $('trTs').checked };
+  opts.language = $('trLang').value;
+  const out = await p(audio, opts);
+  let text;
+  if (opts.return_timestamps && out.chunks) text = out.chunks.map(c => '[' + fmtT(c.timestamp[0] || 0).replace(/\.\d$/, '') + '] ' + c.text.trim()).join('\n');
+  else text = (out.text || '').trim();
+  f.transcript = text; f.trModel = model.split('/').pop() + (opts.task === 'translate' ? ', translated to English' : '');
+  return text;
+}
+function transcriptMd(f) {
+  const d = f.start;
+  const meta = [d ? fmtDate(d) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) : '', f.device, f.mode, fmtT((f.trim[1] - f.trim[0]))].filter(Boolean).join(' · ');
+  return '# ' + outBase(f) + '\n\n' + meta + '  \nSource file: ' + f.name + ' · transcribed with ' + (f.trModel || 'Whisper') + '\n\n' + f.transcript.trim() + '\n';
+}
+$('bTr').onclick = async () => {
+  const f = cur; $('bTr').disabled = $('bTrAll').disabled = true;
+  try { await transcribe(f); if (cur === f) $('trText').value = f.transcript; trStatus('Done'); renderList(); }
+  catch (e) { console.error(e); trStatus('Failed: ' + e.message); }
+  finally { $('bTr').disabled = $('bTrAll').disabled = false; lcdProgress(0, ''); }
+};
+$('bTrAll').onclick = async () => {
+  $('bTr').disabled = $('bTrAll').disabled = true; const ok = files.filter(f => !f.error);
+  try { for (let i = 0; i < ok.length; i++) { trStatus('File ' + (i + 1) + '/' + ok.length + '…'); await transcribe(ok[i]); renderList(); if (cur === ok[i]) $('trText').value = ok[i].transcript; }
+    trStatus('All done (' + ok.length + ')'); }
+  catch (e) { console.error(e); trStatus('Failed: ' + e.message); }
+  finally { $('bTr').disabled = $('bTrAll').disabled = false; lcdProgress(0, ''); }
+};
+$('trText').oninput = e => { if (cur) { cur.transcript = e.target.value; } };
+$('trText').onchange = () => renderList();
+$('bTrCopy').onclick = async () => { try { await navigator.clipboard.writeText($('trText').value); trStatus('Copied'); } catch { $('trText').select(); trStatus('Press ⌘C to copy'); } };
+$('bTrSave').onclick = () => { if (!cur || !cur.transcript) { trStatus('Nothing to save yet'); return; } download(new Blob([transcriptMd(cur)], { type: 'text/markdown' }), outBase(cur) + '.md'); };
+
+/* ============ remember choices (this browser only) ============ */
+for (const id of ['outFmt', 'outPattern', 'trModel', 'trLang', 'trTs', 'trGpu', 'trTrans']) {
+  const el = $(id), key = 'dm1conv.' + id, isCb = el.type === 'checkbox';
+  try { const v = localStorage.getItem(key); if (v !== null) { if (isCb) el.checked = v === '1'; else el.value = v; } } catch {}
+  if (el.tagName === 'SELECT' && el.selectedIndex < 0) el.selectedIndex = 0;
+  el.addEventListener('change', () => { try { localStorage.setItem(key, isCb ? (el.checked ? '1' : '0') : el.value); } catch {} });
+}
+
+/* ============ drop / pick ============ */
+const drop = $('drop');
+drop.onclick = () => $('pick').click();
+drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('pick').click(); } };
+$('pick').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
+['dragenter', 'dragover'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (t === 'drop' || !e.relatedTarget) drop.classList.remove('over'); }));
+document.addEventListener('drop', async e => { const { list, skipped } = await collect(e.dataTransfer); addFiles(list, skipped); });
+</script>
+</body>
+</html>
